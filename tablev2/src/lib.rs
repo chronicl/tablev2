@@ -11,7 +11,7 @@ use std::{
 };
 
 pub mod derive {
-    pub use tablev2_macros::Queryable;
+    pub use tablev2_macros::{Queryable, QueryableSerde};
 }
 
 pub mod store;
