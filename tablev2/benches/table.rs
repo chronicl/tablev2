@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::hash::Hash;
 use tablev2::{Query, Queryable, Table, VecStore};
 
-fn table_get(query: &Query<User>) {
+fn table_get(query: &impl Query<User, VecStore<User>>) {
     query.get().count();
 }
 

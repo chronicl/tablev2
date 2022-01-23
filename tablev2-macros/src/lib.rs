@@ -65,186 +65,268 @@ fn derive_queryable_inner(
         field_types.push(field_ty);
     }
 
-    let table_name: Ident = parse_str(&format!("{}Table", name)).unwrap();
+    let index_name: Ident = parse_str(&format!("{}Index", name)).unwrap();
+    let query_name: Ident = parse_str(&format!("{}Query", name)).unwrap();
+    let query_mut_name: Ident = parse_str(&format!("{}QueryMut", name)).unwrap();
 
     let impl_queryable = quote!(
         impl tablev2::Queryable for #name {
-            type Table<S: tablev2::Store<Self>> = #table_name<S>;
+            type Index = #index_name;
+            type Query<'a, S: 'static> = #query_name<'a, S>;
+            type QueryMut<'a, S: 'static> = #query_mut_name<'a, S>;
         }
 
         #[derive(Default)]
-        struct #table_name<S> {
-            store: S,
-
+        struct #index_name {
             #(#field_names :
               std::collections::BTreeMap<#field_types, std::collections::BTreeSet<usize>>,)*
         }
 
-
-        impl<S> tablev2::TableTrait<#name, S> for #table_name<S>
-        where
-            S: tablev2::Store<#name>,
-        {
+        impl tablev2::Index<#name> for #index_name {
             fn new() -> Self {
                 Self {
-                    store: S::new(),
                     name: std::collections::BTreeMap::new(),
                     age: std::collections::BTreeMap::new(),
                 }
             }
 
-            fn query(&self) -> tablev2::Query<#name, S> {
-                tablev2::Query {
-                    table: self,
+            fn query<'a, S>(&'a self, store: &'a S) -> <#name as tablev2::Queryable>::Query<'a, S>
+            where
+                S: 'static,
+            {
+                #query_name {
+                    index: self,
+                    store,
                     matches: Vec::new(),
                     match_columns: std::collections::HashSet::new(),
                 }
             }
 
-            fn query_mut(&mut self) -> tablev2::QueryMut<#name, S> {
-                tablev2::QueryMut::new(self)
+            fn query_mut<'a, S>(&'a mut self, store: &'a mut S) -> <#name as tablev2::Queryable>::QueryMut<'a, S>
+            where
+                S: 'static,
+            {
+                #query_mut_name {
+                    index: self,
+                    store,
+                    match_counter: std::collections::BTreeMap::new(),
+                    match_columns: std::collections::HashSet::new(),
+                }
             }
 
-            fn insert(&mut self, value: #name) {
-                let i = self.store.insert(value);
-                self.add_to_index(i);
-            }
-
-            fn add_to_index(&mut self, i: usize) {
-                if let Some(value) = self.store.get(i) {
+            fn add_to_index<S: tablev2::Store<#name>>(&mut self, store: &mut S, i: usize) {
+                if let Some(value) = store.get(i) {
                     #(
                         self.#field_names.entry(value.#field_names.clone()).or_default().insert(i);
                     )*
                 }
             }
 
-            fn remove_from_index(&mut self, i: usize) {
-                if let Some(value) = self.store.get(i) {
+            fn remove_from_index<S: tablev2::Store<#name>>(&mut self, store: &mut S, i: usize) {
+                if let Some(value) = store.get(i) {
                     #(
                         self.#field_names.get_mut(&value.#field_names).map(|map| map.remove(&i));
                     )*
                 }
             }
-
-            fn store(&self) -> &S {
-                &self.store
-            }
-
-            fn store_mut(&mut self) -> &mut S {
-                &mut self.store
-            }
-
-            // pub fn remove<Tname, Tage, Rname>(&mut self, query: &UserQuery<Tname, Tage, Rname>) {}
         }
 
-        pub trait UserQuery {
-            #(
-                fn #field_names<T>(self, #field_names: &T) -> Self
-                where
-                    #field_types: std::borrow::Borrow<T> + Ord,
-                    T: Ord + ?Sized;
-            )*
+        struct #query_name<'a, S> {
+            pub index: &'a <#name as tablev2::Queryable>::Index,
+            pub store: &'a S,
+            pub matches: Vec<tablev2::QueryColumnMatches<'a>>,
+            pub match_columns: std::collections::HashSet<&'static str>,
+        }
 
-            #(
-                fn #field_ranges<T, R>(self, #field_ranges: R) -> Self
-                where
-                    #field_types: std::borrow::Borrow<T> + Ord,
-                    T: Ord + ?Sized,
-                    R: std::ops::RangeBounds<T>;
-            )*
+        impl<'a, S> tablev2::Query<#name, S> for #query_name<'a, S> {
+            fn get<'b>(&'b self) -> tablev2::Matches<'b, #name, S> {
+                let columns = &self.matches;
+                let columns_len = self.match_columns.len() as u32;
+
+                if columns.len() == 0 {
+                    return tablev2::Matches {
+                        index: self.index,
+                        store: self.store,
+                        strategy: tablev2::QueryStrategy::MatchAll { current: 0 },
+                    };
+                }
+
+                if columns.len() < columns_len as usize {
+                    return tablev2::Matches {
+                        index: self.index,
+                        store: self.store,
+                        strategy: tablev2::QueryStrategy::NoMatches,
+                    };
+                }
+
+                let mut matches = Vec::new();
+
+                for column in columns.iter() {
+                    match column {
+                        tablev2::QueryColumnMatches::Selected(column) => matches.push(column.iter().peekable()),
+                        tablev2::QueryColumnMatches::Range(column) => {
+                            for c in column {
+                                matches.push(c.iter().peekable())
+                            }
+                        }
+                    }
+                }
+
+                let strategy = tablev2::QueryStrategy::MatchCounter {
+                    match_counter: std::collections::BTreeMap::new(),
+                    matches,
+                    columns_len,
+                };
+
+                tablev2::Matches {
+                    index: self.index,
+                    store: self.store,
+                    strategy,
+                }
+            }
+        }
+
+        struct #query_mut_name<'a, S> {
+            pub index: &'a mut <#name as tablev2::Queryable>::Index,
+            pub store: &'a mut S,
+            // Instead of keeping track of QueryColumnMatches like for a normal
+            // Query, we create a match counter which is filled up immediately rather
+            // than lazily during iteration.
+            pub match_counter: std::collections::BTreeMap<usize, u32>,
+            pub match_columns: std::collections::HashSet<&'static str>,
+        }
+
+        impl<'a, S> tablev2::QueryMut<#name, S> for #query_mut_name<'a, S> {
+            fn get<'b>(&'b self) -> tablev2::Matches<'b, #name, S> {
+                tablev2::Matches {
+                    index: self.index,
+                    store: self.store,
+                    strategy: tablev2::QueryStrategy::PrefilledMatchCounter {
+                        match_counter: self.match_counter.clone(),
+                        columns_len: self.match_columns.len() as u32,
+                    },
+                }
+            }
+
+            fn update(&mut self, f: impl Fn(&mut #name))
+            where
+                S: tablev2::Store<#name>,
+            {
+                use tablev2::Index;
+
+                let mut matches = Vec::new();
+                let mut query_result: tablev2::Matches<_, _> = self.get();
+                while let Some(i) = query_result.next_match() {
+                    matches.push(i);
+                }
+
+                for i in matches {
+                    // Removing value from index
+                    self.index.remove_from_index(self.store, i);
+
+                    // Modifying value
+                    if let Some(m) = self.store.get_mut(i) {
+                        f(m);
+                    }
+
+                    // Adding value back to the index
+                    self.index.add_to_index(self.store, i);
+                }
+            }
+
+            fn remove(&mut self)
+            where
+                S: tablev2::Store<#name>,
+            {
+                use tablev2::Index;
+
+                let mut matches = Vec::new();
+                let mut query_result: tablev2::Matches<_, _> = self.get();
+                while let Some(i) = query_result.next_match() {
+                    matches.push(i);
+                }
+
+                for i in matches {
+                    self.index.remove_from_index(self.store, i);
+                    self.store.remove(i);
+                }
+            }
         }
 
 
-        impl<'a, S: tablev2::Store<#name>> UserQuery for tablev2::Query<'a, #name, S> {
-          #(
+        // Filling in the query
+        impl<'a, S> #query_name<'a, S> {
+            #(
             fn #field_names<T>(mut self, #field_names: &T) -> Self
             where
                 #field_types: std::borrow::Borrow<T> + Ord,
                 T: Ord + ?Sized
             {
-                self.match_columns.insert("#field_names");
-                if let Some(matches) = self.table.#field_names.get(#field_names) {
+                self.match_columns.insert(stringify!(#field_names));
+                if let Some(matches) = self.index.#field_names.get(#field_names) {
                     self.matches.push(tablev2::QueryColumnMatches::Selected(matches));
                 }
                 self
             }
 
-          )*
+            )*
 
-          #(
+            #(
             fn #field_ranges<T, R>(mut self, #field_ranges: R) -> Self
             where
                 #field_types: std::borrow::Borrow<T> + Ord,
                 T: Ord + ?Sized,
                 R: std::ops::RangeBounds<T>
             {
-                self.match_columns.insert("#field_names");
-                let matches: Vec<_> = self.table.#field_names.range(#field_ranges).map(|(_, m)| m).collect();
+                self.match_columns.insert(stringify!(#field_names));
+                let matches: Vec<_> = self.index.#field_names.range(#field_ranges).map(|(_, m)| m).collect();
                 if matches.len() > 0 {
                     self.matches.push(tablev2::QueryColumnMatches::Range(matches));
                 }
                 self
             }
 
-          )*
-        }
-
-
-        pub trait UserQueryMut {
-            #(
-                fn #field_names<T>(self, #field_names: &T) -> Self
-              where
-                  #field_types: std::borrow::Borrow<T> + Ord,
-                  T: Ord + ?Sized;
-            )*
-
-            #(
-                fn #field_ranges<T, R>(self, #field_ranges: R) -> Self
-                where
-                    #field_types: std::borrow::Borrow<T> + Ord,
-                    T: Ord + ?Sized,
-                    R: std::ops::RangeBounds<T>;
             )*
         }
 
-        impl<'a, S: tablev2::Store<#name>> UserQueryMut for tablev2::QueryMut<'a, #name, S> {
+        impl<'a, S> #query_mut_name<'a, S> {
             #(
-              fn #field_names<T>(mut self, #field_names: &T) -> Self
-              where
-                  #field_types: std::borrow::Borrow<T> + Ord,
-                  T: Ord + ?Sized
-              {
-                    self.match_columns.insert(stringify!(#field_names));
-                    if let Some(matches) = self.table.#field_names.get(#field_names) {
-                        for m in matches.iter() {
-                            let counter = self.match_counter.entry(*m).or_default();
-                            *counter += 1;
-                        }
+            fn #field_names<T>(mut self, #field_names: &T) -> Self
+            where
+                #field_types: std::borrow::Borrow<T> + Ord,
+                T: Ord + ?Sized
+            {
+                self.match_columns.insert(stringify!(#field_names));
+                if let Some(matches) = self.index.#field_names.get(#field_names) {
+                    for m in matches.iter() {
+                        let counter = self.match_counter.entry(*m).or_default();
+                        *counter += 1;
                     }
-                    self
-              }
+                }
+                self
+            }
 
             )*
 
             #(
-              fn #field_ranges<T, R>(mut self, #field_ranges: R) -> Self
-              where
-                  #field_types: std::borrow::Borrow<T> + Ord,
-                  T: Ord + ?Sized,
-                  R: std::ops::RangeBounds<T>
-              {
-                    self.match_columns.insert(stringify!(#field_names));
-                    for matches in self.table.#field_names.range(#field_ranges).map(|(_, m)| m) {
-                        for m in matches.iter() {
-                            let counter = self.match_counter.entry(*m).or_default();
-                            *counter += 1;
-                        }
+            fn #field_ranges<T, R>(mut self, #field_ranges: R) -> Self
+            where
+                #field_types: std::borrow::Borrow<T> + Ord,
+                T: Ord + ?Sized,
+                R: std::ops::RangeBounds<T>
+            {
+                self.match_columns.insert(stringify!(#field_names));
+                for matches in self.index.#field_names.range(#field_ranges).map(|(_, m)| m) {
+                    for m in matches.iter() {
+                        let counter = self.match_counter.entry(*m).or_default();
+                        *counter += 1;
                     }
-                    self
-              }
+                }
+                self
+            }
 
             )*
-          }
+        }
     );
 
     Ok(impl_queryable)
