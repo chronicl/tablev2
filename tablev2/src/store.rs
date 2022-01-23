@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, marker::PhantomData};
 
 pub trait Store<T>: Sized {
@@ -51,6 +52,7 @@ pub trait Store<T>: Sized {
 //     }
 // }
 
+#[derive(Serialize, Deserialize)]
 pub struct VecStore<T> {
     rows: Vec<T>,
     free_rows: BTreeSet<usize>,

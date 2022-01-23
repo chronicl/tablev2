@@ -10,6 +10,8 @@ use std::{
     iter::Peekable,
 };
 
+use serde::{Deserialize, Serialize};
+
 pub mod derive {
     pub use tablev2_macros::Queryable;
 }
@@ -17,6 +19,7 @@ pub mod derive {
 pub mod store;
 pub use store::*;
 
+#[derive(Serialize, Deserialize)]
 pub struct Table<T: Queryable, S = VecStore<T>> {
     index: T::Index,
     store: S,

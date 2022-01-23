@@ -416,6 +416,9 @@ name = "serde"
 version = "1.0.135"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2cf9235533494ea2ddcdb794665461814781c53f19d87b76e571a1c35acbad2b"
+dependencies = [
+ "serde_derive",
+]
 
 [[package]]
 name = "serde_cbor"
@@ -465,6 +468,7 @@ name = "tablev2"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "serde",
  "tablev2-macros",
 ]
 
