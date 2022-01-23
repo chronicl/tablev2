@@ -76,7 +76,8 @@ fn derive_queryable_inner(
             type QueryMut<'a, S: 'static> = #query_mut_name<'a, S>;
         }
 
-        #[derive(Default)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[derive(Default, Debug, Clone)]
         struct #index_name {
             #(#field_names :
               std::collections::BTreeMap<#field_types, std::collections::BTreeSet<usize>>,)*
