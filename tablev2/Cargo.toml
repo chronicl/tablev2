@@ -1,0 +1,16 @@
+[package]
+name = "tablev2"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tablev2-macros = { path = "../tablev2-macros" }
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "table"
+harness = false
