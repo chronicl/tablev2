@@ -19,7 +19,7 @@ pub mod derive {
 pub mod store;
 pub use store::*;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Table<T: Queryable, S = VecStore<T>> {
     index: T::Index,
     store: S,

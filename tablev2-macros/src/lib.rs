@@ -85,8 +85,9 @@ fn derive_queryable_inner(
         impl tablev2::Index<#name> for #index_name {
             fn new() -> Self {
                 Self {
-                    name: std::collections::BTreeMap::new(),
-                    age: std::collections::BTreeMap::new(),
+                    #(
+                        #field_names: std::collections::BTreeMap::new(),
+                    )*
                 }
             }
 
