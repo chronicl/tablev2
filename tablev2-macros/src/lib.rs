@@ -5,15 +5,31 @@ use syn::{Error, Field, Ident};
 
 #[proc_macro_derive(Queryable, attributes(index))]
 pub fn derive_queryable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    derive_queryable_inner(proc_macro2::TokenStream::from(input))
+    derive_queryable_inner(proc_macro2::TokenStream::from(input), false)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(QueryableSerde, attributes(index))]
+pub fn derive_queryable_serde(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    derive_queryable_inner(proc_macro2::TokenStream::from(input), true)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }
 
 fn derive_queryable_inner(
     input: proc_macro2::TokenStream,
+    serde: bool,
 ) -> syn::Result<proc_macro2::TokenStream> {
     let input: ItemStruct = syn::parse2(input).unwrap();
+
+    println!("{:#?}", input);
+
+    let serde = if serde {
+        quote!(#[derive(serde::Serialize, serde::Deserialize)])
+    } else {
+        quote!()
+    };
 
     let vis = &input.vis;
 
@@ -26,7 +42,6 @@ fn derive_queryable_inner(
         ));
     }
 
-    println!("{:#?}", input);
     let name = &input.ident;
     let fields = &input.fields;
 
@@ -78,7 +93,7 @@ fn derive_queryable_inner(
             type QueryMut<'a, S: 'static> = #query_mut_name<'a, S>;
         }
 
-        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #serde
         #[derive(Default, Debug, Clone)]
         #vis struct #index_name {
             #(#field_names :
@@ -339,6 +354,7 @@ fn derive_queryable_inner(
 #[test]
 fn test_derive_queryable() {
     let input = quote!(
+        #[derive(Serialize)]
         pub struct User {
             #[index]
             name: String,
@@ -346,8 +362,7 @@ fn test_derive_queryable() {
             age: u32,
         }
     );
-    println!("{:#?}", input);
-    let output = derive_queryable_inner(input).unwrap().to_string();
+    let output = derive_queryable_inner(input, false).unwrap().to_string();
     println!("{}", rustfmt(&output));
 }
 
@@ -392,5 +407,5 @@ fn test_derive_queryable_errors() {
             A,
         }
     );
-    assert!(derive_queryable_inner(input).is_err());
+    assert!(derive_queryable_inner(input, false).is_err());
 }
