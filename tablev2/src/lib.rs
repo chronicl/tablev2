@@ -10,8 +10,6 @@ use std::{
     iter::Peekable,
 };
 
-use serde::{Deserialize, Serialize};
-
 pub mod derive {
     pub use tablev2_macros::Queryable;
 }

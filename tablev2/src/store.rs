@@ -12,44 +12,7 @@ pub trait Store<T>: Sized {
     /// we've reached the end of the store.
     fn is_free(&self, i: usize) -> bool;
     fn len(&self) -> usize;
-
-    // fn iter(&self) -> StoreIter<T, Self> {
-    //     StoreIter {
-    //         store: self,
-    //         current: 0,
-    //         _r: PhantomData,
-    //     }
-    // }
 }
-
-// #[derive(Debug, Clone)]
-// pub struct StoreIter<'a, T, S> {
-//     store: &'a S,
-//     current: usize,
-//     _r: PhantomData<T>,
-// }
-
-// impl<'a, T, S: Store<T>> Iterator for StoreIter<'a, T, S>
-// where
-//     T: 'a,
-// {
-//     type Item = usize;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         loop {
-//             self.current += 1;
-
-//             if self.store.is_free(self.current) {
-//                 continue;
-//             }
-
-//             // We know that the slot should not be free, which either means
-//             // there is some row at self.current or we've reached the end of
-//             // the store in which case this `get` returns None.
-//             return self.store.get(self.current).map(|_| self.current);
-//         }
-//     }
-// }
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VecStore<T> {
