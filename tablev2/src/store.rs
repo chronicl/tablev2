@@ -14,6 +14,7 @@ pub trait Store<T>: Sized {
     fn len(&self) -> usize;
 }
 
+#[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VecStore<T> {
     rows: Vec<T>,
