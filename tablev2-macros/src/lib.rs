@@ -15,6 +15,8 @@ fn derive_queryable_inner(
 ) -> syn::Result<proc_macro2::TokenStream> {
     let input: ItemStruct = syn::parse2(input).unwrap();
 
+    let vis = &input.vis;
+
     // Check if generics exist
     let syn::Generics { params, .. } = &input.generics;
     if !params.empty_or_trailing() {
@@ -78,7 +80,7 @@ fn derive_queryable_inner(
 
         #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         #[derive(Default, Debug, Clone)]
-        struct #index_name {
+        #vis struct #index_name {
             #(#field_names :
               std::collections::BTreeMap<#field_types, std::collections::BTreeSet<usize>>,)*
         }
@@ -133,7 +135,7 @@ fn derive_queryable_inner(
             }
         }
 
-        struct #query_name<'a, S> {
+        #vis struct #query_name<'a, S> {
             pub index: &'a <#name as tablev2::Queryable>::Index,
             pub store: &'a S,
             pub matches: Vec<tablev2::QueryColumnMatches<'a>>,
@@ -188,7 +190,7 @@ fn derive_queryable_inner(
             }
         }
 
-        struct #query_mut_name<'a, S> {
+        #vis struct #query_mut_name<'a, S> {
             pub index: &'a mut <#name as tablev2::Queryable>::Index,
             pub store: &'a mut S,
             // Instead of keeping track of QueryColumnMatches like for a normal
@@ -337,13 +339,14 @@ fn derive_queryable_inner(
 #[test]
 fn test_derive_queryable() {
     let input = quote!(
-        struct User {
+        pub struct User {
             #[index]
             name: String,
             #[index(range)]
             age: u32,
         }
     );
+    println!("{:#?}", input);
     let output = derive_queryable_inner(input).unwrap().to_string();
     println!("{}", rustfmt(&output));
 }
